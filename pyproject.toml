@@ -1,0 +1,396 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "covenant-ai"
+version = "2.0.0"
+description = "Constitutional Alignment Framework for Autonomous Intelligence"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Covenant.AI Team", email = "team@covenant-ai.org"}
+]
+maintainers = [
+    {name = "Covenant.AI Team", email = "team@covenant-ai.org"}
+]
+keywords = [
+    "ai-safety",
+    "alignment",
+    "autonomous-agents",
+    "constitutional-ai",
+    "ethics",
+    "multi-agent",
+    "quantum-computing",
+    "formal-verification"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    # Core framework
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "typing-extensions>=4.9.0",
+    
+    # Web framework
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "httpx>=0.26.0",
+    
+    # Database & Cache
+    "sqlalchemy>=2.0.25",
+    "alembic>=1.13.0",
+    "asyncpg>=0.29.0",
+    "redis[hiredis]>=5.0.1",
+    
+    # AI/ML Core
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "scikit-learn>=1.4.0",
+    "torch>=2.1.0",
+    "transformers>=4.36.0",
+    "sentence-transformers>=2.3.0",
+    
+    # LLM Integration
+    "openai>=1.10.0",
+    "anthropic>=0.18.0",
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.20",
+    "llama-index>=0.9.48",
+    
+    # Reinforcement Learning
+    "gymnasium>=0.29.0",
+    "stable-baselines3>=2.2.0",
+    "ray[rllib]>=2.9.0",
+    
+    # Quantum Computing
+    "qiskit>=0.45.0",
+    "qiskit-aer>=0.13.0",
+    "pennylane>=0.34.0",
+    "cirq>=1.3.0",
+    
+    # Formal Verification
+    "z3-solver>=4.12.0",
+    "sympy>=1.12",
+    "networkx>=3.2",
+    
+    # Cryptography & Blockchain
+    "cryptography>=42.0.0",
+    "web3>=6.15.0",
+    "eth-account>=0.11.0",
+    "coincurve>=19.0.0",
+    
+    # Monitoring & Observability
+    "prometheus-client>=0.19.0",
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+    "structlog>=24.1.0",
+    
+    # Async & Concurrency
+    "asyncio>=3.4.3",
+    "aiohttp>=3.9.0",
+    "celery[redis]>=5.3.0",
+    
+    # Data Processing
+    "pandas>=2.1.0",
+    "polars>=0.20.0",
+    "pyarrow>=15.0.0",
+    
+    # Graph & Network
+    "igraph>=0.11.0",
+    
+    # Security
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.6",
+    
+    # Configuration
+    "python-dotenv>=1.0.0",
+    "dynaconf>=3.2.0",
+    
+    # Utilities
+    "click>=8.1.0",
+    "rich>=13.7.0",
+    "tqdm>=4.66.0",
+    "tenacity>=8.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-timeout>=2.2.0",
+    "hypothesis>=6.98.0",
+    "faker>=22.0.0",
+    
+    # Linting & Formatting
+    "black>=24.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "pylint>=3.0.0",
+    "isort>=5.13.0",
+    
+    # Type Stubs
+    "types-redis>=4.6.0",
+    "types-requests>=2.31.0",
+    "types-PyYAML>=6.0.12",
+    
+    # Documentation
+    "sphinx>=7.2.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "sphinx-autodoc-typehints>=1.25.0",
+    "myst-parser>=2.0.0",
+    
+    # Pre-commit
+    "pre-commit>=3.6.0",
+    
+    # Profiling
+    "py-spy>=0.3.14",
+    "memory-profiler>=0.61.0",
+    "scalene>=1.5.0",
+]
+
+quantum = [
+    "qiskit-optimization>=0.6.0",
+    "qiskit-machine-learning>=0.7.0",
+    "qiskit-nature>=0.7.0",
+    "amazon-braket-sdk>=1.70.0",
+    "pennylane-qiskit>=0.34.0",
+]
+
+distributed = [
+    "dask[distributed]>=2024.1.0",
+    "ray[default]>=2.9.0",
+    "celery[redis]>=5.3.0",
+]
+
+ml-advanced = [
+    # Deep Learning
+    "tensorflow>=2.15.0",
+    "jax[cuda12_pip]>=0.4.23",
+    "flax>=0.8.0",
+    
+    # Advanced ML
+    "xgboost>=2.0.0",
+    "lightgbm>=4.2.0",
+    "catboost>=1.2.0",
+    
+    # Causal Inference
+    "dowhy>=0.11.0",
+    "causalml>=0.15.0",
+    
+    # Federated Learning
+    "flwr>=1.7.0",
+    
+    # AutoML
+    "optuna>=3.5.0",
+    "hyperopt>=0.2.7",
+]
+
+blockchain = [
+    "web3>=6.15.0",
+    "eth-brownie>=1.20.0",
+    "solcx>=2.0.0",
+]
+
+monitoring = [
+    "grafana-client>=3.7.0",
+    "datadog>=0.48.0",
+    "sentry-sdk>=1.40.0",
+]
+
+all = [
+    "covenant-ai[dev,quantum,distributed,ml-advanced,blockchain,monitoring]",
+]
+
+[project.urls]
+Homepage = "https://covenant-ai.org"
+Documentation = "https://docs.covenant-ai.org"
+Repository = "https://github.com/covenant-ai/covenant-ai"
+"Bug Tracker" = "https://github.com/covenant-ai/covenant-ai/issues"
+Changelog = "https://github.com/covenant-ai/covenant-ai/blob/main/CHANGELOG.md"
+
+[project.scripts]
+covenant = "covenant.cli:main"
+covenant-agent = "covenant.agents.cli:agent_cli"
+covenant-verify = "covenant.verification.cli:verify_cli"
+covenant-swarm = "covenant.swarm.cli:swarm_cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["covenant*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+covenant = ["py.typed", "*.pyi"]
+
+# Black configuration
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# Ruff configuration
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.isort]
+known-first-party = ["covenant"]
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+strict_optional = true
+strict_equality = true
+show_error_codes = true
+show_column_numbers = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "qiskit.*",
+    "cirq.*",
+    "pennylane.*",
+    "z3.*",
+    "web3.*",
+    "ray.*",
+]
+ignore_missing_imports = true
+
+# Pytest configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+    "--tb=short",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "adversarial: marks tests as adversarial/security tests",
+    "quantum: marks tests requiring quantum backend",
+    "gpu: marks tests requiring GPU",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src"]
+branch = true
+parallel = true
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+# Pylint configuration
+[tool.pylint.main]
+py-version = "3.11"
+jobs = 0
+suggestion-mode = true
+
+[tool.pylint.messages_control]
+disable = [
+    "C0111",  # missing-docstring
+    "C0103",  # invalid-name
+    "R0903",  # too-few-public-methods
+    "R0913",  # too-many-arguments
+]
+
+[tool.pylint.format]
+max-line-length = 100
+
+# Bandit security configuration
+[tool.bandit]
+exclude_dirs = ["tests", "scripts"]
+tests = ["B201", "B301"]
+skips = ["B101", "B601"]
