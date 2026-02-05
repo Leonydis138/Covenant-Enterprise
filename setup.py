@@ -1,60 +1,26 @@
 from setuptools import setup, find_packages
-from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
-
-README = (BASE_DIR / "README.md").read_text(encoding="utf-8")
+with open("requirements.txt") as f:
+    requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 setup(
-    name="covenant-ai-enterprise",
-    version="1.0.0",
-    description="Covenant.AI Enterprise — Constitutional, Ethical, Multi-Agent AI System",
-    long_description=README,
+    name="covenant-ai",
+    version="0.1.0",
+    author="Covenant.AI Team",
+    description="Constitutional Alignment Framework for Autonomous Intelligence",
+    long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    author="Covenant AI",
-    license="MIT",
-    python_requires=">=3.10",
+    url="https://github.com/Leonydis138/Covenant-Enterprise",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    include_package_data=True,
-    install_requires=[
-        "fastapi",
-        "uvicorn",
-        "pydantic",
-        "numpy",
-        "scipy",
-        "scikit-learn",
-        "requests",
-        "httpx",
-        "prometheus-client",
-        "loguru",
-    ],
-    extras_require={
-        "dev": [
-            "pytest",
-            "pytest-cov",
-            "black",
-            "isort",
-            "mypy",
-            "pylint",
-        ],
-        "llm": [
-            "openai",
-            "anthropic",
-            "google-generativeai",
-        ],
-        "blockchain": [
-            "web3",
-            "ipfshttpclient",
-        ],
-    },
-    entry_points={
-        "console_scripts": [
-            "covenant=covenant_cli:main",
-        ]
-    },
+    install_requires=requirements,
     classifiers=[
-        "Programming Language :: Python :: 3",
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.11",
     ],
+    python_requires=">=3.11",
 )
