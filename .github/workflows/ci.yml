@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: false
+          cache: 'pip'  # ✅ fixed caching
 
       - name: Install dependencies
         run: |
@@ -173,7 +173,6 @@ jobs:
           with open("merged-safety-report.json", "w") as f:
               json.dump(merged_vulns, f, indent=2)
 
-          # Fail workflow if any vulnerabilities found
           if merged_vulns:
               print("❌ Vulnerabilities detected! Failing workflow.")
               sys.exit(1)
@@ -291,4 +290,3 @@ jobs:
       - name: Notify on failure
         if: failure()
         run: echo "CI failed - check GitHub Actions logs"
-        # Optional: integrate Slack/Teams notifications here
