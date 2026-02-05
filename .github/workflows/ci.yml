@@ -8,7 +8,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  issues: write
+  id-token: write
 
 jobs:
   lint-and-test:
@@ -48,17 +50,17 @@ jobs:
       - name: Fix mypy.ini
         run: |
           echo "Creating correct mypy.ini configuration..."
-          cat > mypy.ini << 'EOF'
-          [mypy]
-          python_version = 3.11
-          ignore_missing_imports = true
-          warn_return_any = true
-          warn_unused_configs = true
-          disallow_untyped_defs = false
-          
-          [mypy-src.covenant.*]
-          EOF
-          
+          cat > mypy.ini <<'EOF'
+[mypy]
+python_version = 3.11
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[mypy-covenant.*]
+EOF
+
           echo "New mypy.ini content:"
           cat mypy.ini
 
@@ -106,7 +108,7 @@ jobs:
       - name: Run safety scan
         run: |
           pip freeze > safety-requirements.txt
-          safety check --file=safety-requirements.txt --json > safety-report.json || echo '[]' > safety-report.json
+          safety check --file=safety-requirements.txt --json > safety-report.json || true
 
       - name: Upload safety report
         uses: actions/upload-artifact@v4
@@ -123,7 +125,6 @@ jobs:
         with:
           pattern: '*'
           path: ./
-          merge-multiple: true
 
       - name: Create summary
         run: |
@@ -131,19 +132,19 @@ jobs:
           echo "# CI Summary" > summary.md
           echo "## Generated on $(date)" >> summary.md
           echo "" >> summary.md
-          
+
           # Check if coverage file exists
           if [ -f "coverage.xml" ]; then
-            echo "✅ Tests passed with coverage data"
+            echo "✅ Tests passed with coverage data" >> summary.md
           else
-            echo "⚠️ No coverage data found"
+            echo "⚠️ No coverage data found" >> summary.md
           fi
-          
+
           # Check safety report
           if [ -f "safety-report.json" ]; then
-            echo "✅ Security scan completed"
+            echo "✅ Security scan completed" >> summary.md
           else
-            echo "⚠️ No security report found"
+            echo "⚠️ No security report found" >> summary.md
           fi
 
       - name: Upload summary
@@ -158,10 +159,10 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
@@ -182,7 +183,7 @@ jobs:
         with:
           name: ci-summary
           path: ./
-      
+
       - name: Post comment
         uses: peter-evans/create-or-update-comment@v4
         with:
