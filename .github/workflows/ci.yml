@@ -10,15 +10,15 @@ on:
 permissions:
   contents: read
 
-# -------------------------
-# Lint & Test Job
-# -------------------------
 jobs:
+  # -------------------------
+  # Lint & Test Job
+  # -------------------------
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']  # ✅ Only 3.11
+        python-version: ['3.11']
       fail-fast: false
 
     steps:
@@ -38,19 +38,22 @@ jobs:
                       web3 ipfshttpclient openai anthropic google-generativeai \
                       prometheus-client jaeger-client \
                       pytest pytest-cov black mypy pylint
-          pip install -e .
+          pip install -e Covenant-Enterprise
+
+      - name: Auto-format with Black (optional)
+        run: black Covenant-Enterprise tests
 
       - name: Format check (Black)
-        run: black --check covenant tests
+        run: black --check Covenant-Enterprise tests
 
       - name: Type check (mypy)
-        run: mypy covenant --ignore-missing-imports
+        run: mypy Covenant-Enterprise --ignore-missing-imports
 
       - name: Lint (pylint)
-        run: pylint covenant || true
+        run: pylint Covenant-Enterprise || true
 
       - name: Run tests
-        run: pytest tests --cov=covenant --cov-report=xml --junitxml=junit/results.xml
+        run: pytest tests --cov=Covenant-Enterprise --cov-report=xml --junitxml=junit/results.xml
 
       - name: Smoke tests
         run: |
@@ -74,14 +77,14 @@ jobs:
             coverage.xml
             workflow_setup.log
 
-# -------------------------
-# Security Scan Job
-# -------------------------
+  # -------------------------
+  # Security Scan Job
+  # -------------------------
   security:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']  # ✅ Only 3.11
+        python-version: ['3.11']
     needs: lint-and-test
 
     steps:
@@ -117,9 +120,9 @@ jobs:
           name: safety-report-${{ matrix.python-version }}
           path: safety-report-${{ matrix.python-version }}.json
 
-# -------------------------
-# Merge Security Reports + CI Summary
-# -------------------------
+  # -------------------------
+  # Merge Security Reports + CI Summary
+  # -------------------------
   merge-security-reports:
     runs-on: ubuntu-latest
     needs: security
@@ -183,9 +186,9 @@ jobs:
           name: merged-safety-report
           path: merged-safety-report.json
 
-# -------------------------
-# Docker Build Job
-# -------------------------
+  # -------------------------
+  # Docker Build Job
+  # -------------------------
   build-docker:
     needs: [lint-and-test, merge-security-reports]
     runs-on: ubuntu-latest
@@ -206,9 +209,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-# -------------------------
-# PR Comment with Safety + Coverage
-# -------------------------
+  # -------------------------
+  # PR Comment with Safety + Coverage
+  # -------------------------
   pr-comment:
     runs-on: ubuntu-latest
     needs: merge-security-reports
@@ -273,9 +276,9 @@ jobs:
           body: |
             $(cat pr_comment.md)
 
-# -------------------------
-# Notification Job
-# -------------------------
+  # -------------------------
+  # Notification Job
+  # -------------------------
   notify:
     needs: [lint-and-test, merge-security-reports, build-docker]
     runs-on: ubuntu-latest
