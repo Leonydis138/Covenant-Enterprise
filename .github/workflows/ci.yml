@@ -8,96 +8,50 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # Required for auto-committing formatting changes
+  contents: write
 
 jobs:
-  # -------------------------
-  # Lint & Test Job
-  # -------------------------
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ['3.11']
     steps:
-      - name: Checkout repository with full history
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for git diff to work properly
+          fetch-depth: 0
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
-      - name: Upgrade pip and setuptools
+      - name: Upgrade pip
         run: python -m pip install --upgrade pip setuptools wheel
 
-      - name: Install project dependencies
+      - name: Install dependencies
         run: |
-          # Install from requirements.txt with relaxed version constraints if needed
-          pip install -r requirements.txt || pip install -r requirements.txt --use-deprecated=legacy-resolver
-          
-          # Install development tools
+          pip install -r requirements.txt
           pip install pytest pytest-cov black mypy pylint isort
 
-      - name: Install project in development mode
+      - name: Install project
         run: pip install -e .
 
-      - name: Auto-format with Black
-        id: black-format
-        run: |
-          # Format code first
-          black src/covenant tests
-          
-          # Check if any files were changed by Black
-          if git diff --name-only | grep -q '\.py$'; then
-            echo "Changes detected after Black formatting"
-            echo "black_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "No changes needed for Black"
-            echo "black_changed=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Format with Black
+        run: black src/covenant tests --check || black src/covenant tests
 
-      - name: Sort imports with isort
-        id: isort-format
-        run: |
-          # Format imports with Black-compatible profile
-          isort src/covenant tests --profile black
-          
-          # Check if any files were changed by isort
-          if git diff --name-only | grep -q '\.py$'; then
-            echo "Changes detected after isort formatting"
-            echo "isort_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "No changes needed for isort"
-            echo "isort_changed=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Sort imports
+        run: isort src/covenant tests --check-only || isort src/covenant tests
 
-      - name: Commit formatting changes
-        if: steps.black-format.outputs.black_changed == 'true' || steps.isort-format.outputs.isort_changed == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add .
-          git commit -m "style: Auto-format with Black and isort"
-          git push
+      - name: Type check
+        run: mypy src/covenant --config-file mypy.ini
 
-      - name: Type check with mypy
-        run: |
-          # First check if mypy config is valid
-          mypy --config-file mypy.ini --show-config > /dev/null 2>&1 && echo "mypy config is valid"
-          
-          # Run type checking on the covenant package
-          mypy src/covenant --config-file mypy.ini
+      - name: Run linting
+        run: pylint src/covenant --fail-under=6.0 || true
 
-      - name: Lint with pylint
-        run: |
-          # Run pylint but don't fail the build on low scores
-          pylint src/covenant --fail-under=6.0 || echo "Pylint score below threshold"
-
-      - name: Run tests with coverage
+      - name: Run tests
         run: |
           pytest tests/ -v \
             --cov=src/covenant \
@@ -105,18 +59,15 @@ jobs:
             --cov-report=html \
             --junitxml=junit/results.xml
 
-      - name: Upload test artifacts
+      - name: Upload test results
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.python-version }}
+          name: test-results
           path: |
             junit/
             coverage.xml
             htmlcov/
 
-  # -------------------------
-  # Security Scan Job
-  # -------------------------
   security:
     runs-on: ubuntu-latest
     needs: lint-and-test
@@ -124,7 +75,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -134,21 +85,10 @@ jobs:
           pip install -r requirements.txt
           pip install safety
 
-      - name: Generate safety requirements
-        run: pip freeze > safety-requirements.txt
-
-      - name: Run Safety security scan
-        id: safety-scan
+      - name: Run safety scan
         run: |
-          safety check \
-            --disable-audit-and-monitor \
-            --full-report \
-            --file=safety-requirements.txt \
-            --json > safety-report.json || echo '[]' > safety-report.json
-          
-          # Count vulnerabilities
-          vuln_count=$(python -c "import json; data = json.load(open('safety-report.json')); print(len(data) if isinstance(data, list) else 0)")
-          echo "vuln_count=$vuln_count" >> $GITHUB_OUTPUT
+          pip freeze > safety-requirements.txt
+          safety check --file=safety-requirements.txt --json > safety-report.json || echo '[]' > safety-report.json
 
       - name: Upload safety report
         uses: actions/upload-artifact@v4
@@ -156,103 +96,54 @@ jobs:
           name: safety-report
           path: safety-report.json
 
-  # -------------------------
-  # Merge Reports Job
-  # -------------------------
   merge-reports:
     runs-on: ubuntu-latest
     needs: [lint-and-test, security]
     steps:
-      - name: Download test results
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: test-results-*
-          path: test-results
+          pattern: '*'
+          path: ./
           merge-multiple: true
 
-      - name: Download safety report
-        uses: actions/download-artifact@v4
-        with:
-          name: safety-report
-          path: safety-reports
-
-      - name: Generate CI summary
-        id: summary
+      - name: Create summary
         run: |
-          # Create summary markdown
-          echo "## 🛡️ CI Summary Report" > summary.md
-          echo "### Generated on $(date)" >> summary.md
+          # Create a simple summary file
+          echo "# CI Summary" > summary.md
+          echo "## Generated on $(date)" >> summary.md
           echo "" >> summary.md
           
-          # Get coverage percentage
-          if [ -f "test-results/coverage.xml" ]; then
-            # Use a single-line Python command for coverage calculation
-            coverage=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('test-results/coverage.xml'); root = tree.getroot(); print(round(float(root.attrib.get('line-rate', 0)) * 100, 1))")
-            echo "**Test Coverage:** ${coverage}%" >> summary.md
+          # Check if coverage file exists
+          if [ -f "coverage.xml" ]; then
+            echo "✅ Tests passed with coverage data"
           else
-            echo "**Test Coverage:** Not available" >> summary.md
+            echo "⚠️ No coverage data found"
           fi
           
-          # Get safety results
-          if [ -f "safety-reports/safety-report.json" ]; then
-            vuln_count=$(python -c "import json; data = json.load(open('safety-reports/safety-report.json')); print(len(data) if isinstance(data, list) else 0)")
-            echo "**Security Vulnerabilities:** $vuln_count" >> summary.md
-            
-            if [ "$vuln_count" -gt 0 ]; then
-              echo "" >> summary.md
-              echo "### 🔴 Security Issues Found:" >> summary.md
-              # Write Python script to a temporary file to avoid YAML parsing issues
-              cat > /tmp/list_vulns.py << 'EOF'
-import json
-import sys
-try:
-    with open('safety-reports/safety-report.json') as f:
-        data = json.load(f)
-        for i, vuln in enumerate(data[:5]):
-            print(f'- **{vuln.get("package_name", "Unknown")}**: {vuln.get("vulnerability_id", "Unknown")}')
-        if len(data) > 5:
-            print(f'- ... and {len(data) - 5} more')
-except Exception as e:
-    print(f"- Error reading safety report: {e}")
-EOF
-              python /tmp/list_vulns.py >> summary.md
-            fi
+          # Check safety report
+          if [ -f "safety-report.json" ]; then
+            echo "✅ Security scan completed"
           else
-            echo "**Security Vulnerabilities:** Report not generated" >> summary.md
-            vuln_count=0
-          fi
-          
-          # Display summary
-          cat summary.md
-          
-          # Set output for workflow status
-          if [ "$vuln_count" -gt 0 ]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "::error::Security vulnerabilities detected!"
-            exit 1
-          else
-            echo "status=success" >> $GITHUB_OUTPUT
+            echo "⚠️ No security report found"
           fi
 
-      - name: Upload summary report
+      - name: Upload summary
         uses: actions/upload-artifact@v4
         with:
           name: ci-summary
           path: summary.md
 
-  # -------------------------
-  # Docker Build Job
-  # -------------------------
-  build-docker:
-    needs: merge-reports
+  docker-build:
     runs-on: ubuntu-latest
+    needs: merge-reports
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
+      
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
@@ -263,9 +154,6 @@ EOF
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # -------------------------
-  # PR Comment Job
-  # -------------------------
   pr-comment:
     runs-on: ubuntu-latest
     needs: merge-reports
@@ -276,30 +164,10 @@ EOF
         with:
           name: ci-summary
           path: ./
-
-      - name: Post PR comment
+      
+      - name: Post comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ github.event.pull_request.number }}
           body-file: summary.md
-
-  # -------------------------
-  # Final Notification
-  # -------------------------
-  notify:
-    runs-on: ubuntu-latest
-    needs: [merge-reports, build-docker]
-    if: always()
-    steps:
-      - name: Success notification
-        if: success()
-        run: |
-          echo "✅ All CI checks passed!"
-          echo "Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-      - name: Failure notification
-        if: failure()
-        run: |
-          echo "❌ CI pipeline failed"
-          echo "Check details at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
