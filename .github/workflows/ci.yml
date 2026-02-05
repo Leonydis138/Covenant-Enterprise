@@ -37,10 +37,11 @@ jobs:
           pip install numpy pandas scipy transformers sentence-transformers faiss-cpu \
                       web3 ipfshttpclient openai anthropic google-generativeai \
                       prometheus-client jaeger-client \
-                      pytest pytest-cov black mypy pylint
-          pip install -e .  # editable install from root (src package)
+                      pytest pytest-cov black mypy pylint isort
+          # Fix editable install — point to current repo
+          pip install -e .
 
-      - name: Auto-format with Black
+      - name: Auto-format with Black (optional)
         run: black src tests
 
       - name: Format check (Black)
@@ -54,6 +55,11 @@ jobs:
 
       - name: Run tests
         run: pytest tests --cov=src --cov-report=xml --junitxml=junit/results.xml
+
+      - name: Smoke tests
+        run: |
+          python workflows/01_setup_environment.py
+          python workflows/09_run_basic_tests.py
 
       - name: Upload coverage report
         if: always()
@@ -70,6 +76,7 @@ jobs:
           path: |
             junit/
             coverage.xml
+            workflow_setup.log
 
   # -------------------------
   # Security Scan Job
@@ -85,7 +92,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
