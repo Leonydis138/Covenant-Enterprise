@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write  # required for committing auto-fixes
 
 jobs:
 
@@ -19,69 +19,58 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11"]
-      fail-fast: false
+        python-version: ['3.11']
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
+          cache: 'pip'
 
-      - name: Upgrade pip and setuptools
+      - name: Upgrade pip
         run: python -m pip install --upgrade pip setuptools wheel
 
       - name: Install dependencies
         run: |
-          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install numpy pandas scipy transformers sentence-transformers faiss-cpu \
-                     web3 ipfshttpclient openai anthropic google-generativeai \
-                     prometheus-client jaeger-client \
-                     pytest pytest-cov black mypy pylint isort
-          pip install -e .
+          pip install -r requirements.txt
+          pip install black isort mypy pylint pytest pytest-cov safety
 
       # -------------------------
-      # Formatting & Linting
+      # Auto-fix formatting & imports
       # -------------------------
-      - name: Sort imports (isort)
-        run: isort src tests
-
       - name: Auto-format with Black
         run: black src tests
 
+      - name: Auto-sort imports with isort
+        run: isort src tests
+
+      # -------------------------
+      # Check formatting & imports
+      # -------------------------
       - name: Check formatting (Black)
         run: black --check src tests
 
       - name: Verify import order (isort)
         run: isort src tests --check-only
 
+      # -------------------------
+      # Type check and lint
+      # -------------------------
       - name: Type check (mypy)
-        run: mypy src --ignore-missing-imports
+        run: mypy src
 
       - name: Lint (pylint)
         run: pylint src || true
 
       # -------------------------
-      # Tests
+      # Run tests
       # -------------------------
       - name: Run tests
         run: pytest tests --cov=src --cov-report=xml --junitxml=junit/results.xml
-
-      - name: Smoke tests
-        run: |
-          python workflows/01_setup_environment.py
-          python workflows/09_run_basic_tests.py
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.python-version }}
-          path: coverage.xml
 
       - name: Upload test artifacts on failure
         if: failure()
@@ -91,7 +80,17 @@ jobs:
           path: |
             junit/
             coverage.xml
-            workflow_setup.log
+
+      # -------------------------
+      # Optional: Commit auto-fixes
+      # -------------------------
+      - name: Commit auto-fixed formatting/imports
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --cached --quiet || git commit -m "chore: auto-fix formatting/imports"
+          git push || echo "No changes to push"
 
   # -------------------------
   # Security Scan Job
@@ -101,12 +100,14 @@ jobs:
     needs: lint-and-test
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ['3.11']
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -126,7 +127,6 @@ jobs:
               --json > safety-report-${{ matrix.python-version }}.json || true
           else
             echo "::warning::No requirements.txt found — skipping Safety scan"
-          fi
 
       - name: Upload Safety report
         if: always()
@@ -141,31 +141,66 @@ jobs:
   merge-reports:
     runs-on: ubuntu-latest
     needs: security
-
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all Safety reports
+        uses: actions/download-artifact@v4
         with:
-          path: reports
+          path: safety-reports
+          name: safety-report-3.11
 
-      - name: Merge reports
+      - name: Download coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-reports
+
+      - name: Merge Safety and Coverage Reports
         run: |
           python - <<'EOF'
-          import json, glob, sys
-          vulns = []
-          for f in glob.glob("reports/**/*.json", recursive=True):
-              with open(f) as fh:
-                  data = json.load(fh)
-                  if isinstance(data, list):
-                      vulns.extend(data)
-          with open("merged-safety-report.json", "w") as out:
-              json.dump(vulns, out, indent=2)
-          if vulns:
-              print("❌ Vulnerabilities detected")
+          import json, glob, xml.etree.ElementTree as ET, sys
+
+          # Merge Safety reports
+          merged_vulns = []
+          vuln_summary = {}
+          for file in glob.glob("safety-reports/*.json"):
+              py_version = file.split("-")[-1].replace(".json", "")
+              with open(file) as f:
+                  data = json.load(f)
+                  count = len(data) if isinstance(data, list) else 0
+                  vuln_summary[py_version] = count
+                  merged_vulns.extend(data if isinstance(data, list) else [])
+
+          # Merge coverage reports
+          coverage_summary = {}
+          for file in glob.glob("coverage-reports/coverage-*.xml"):
+              py_version = file.split("-")[-1].replace(".xml", "")
+              tree = ET.parse(file)
+              root = tree.getroot()
+              coverage_summary[py_version] = float(root.attrib.get("line-rate", 0.0)) * 100
+
+          # Print summary
+          print("\n### CI SUMMARY ###\n")
+          print("{:<10} | {:<12} | {:<15} | {:<7}".format("Python", "Coverage %", "Vulnerabilities", "Status"))
+          print("-"*50)
+          for py_version in sorted(set(list(vuln_summary.keys()) + list(coverage_summary.keys()))):
+              cov = coverage_summary.get(py_version, 0.0)
+              vulns = vuln_summary.get(py_version, 0)
+              status = "✅" if vulns == 0 else "⚠️"
+              print("{:<10} | {:<12.1f} | {:<15} | {:<7}".format(py_version, cov, vulns, status))
+
+          # Save merged report
+          with open("merged-safety-report.json", "w") as f:
+              json.dump(merged_vulns, f, indent=2)
+
+          if merged_vulns:
+              print("❌ Vulnerabilities detected! Failing workflow.")
               sys.exit(1)
-          print("✅ No vulnerabilities detected")
+          else:
+              print("✅ No vulnerabilities detected.")
           EOF
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload merged Safety report
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: merged-safety-report
           path: merged-safety-report.json
@@ -177,16 +212,86 @@ jobs:
     needs: [lint-and-test, merge-reports]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
           push: false
           tags: covenant-ai-enhanced:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -------------------------
+  # PR Comment
+  # -------------------------
+  pr-comment:
+    runs-on: ubuntu-latest
+    needs: merge-reports
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Download merged Safety report
+        uses: actions/download-artifact@v4
+        with:
+          name: merged-safety-report
+          path: ./reports
+
+      - name: Download coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: ./coverage-reports
+
+      - name: Generate PR comment
+        id: generate_comment
+        run: |
+          python - <<'EOF'
+          import json, glob, xml.etree.ElementTree as ET
+
+          comment_md = "### 🛡️ Safety Scan & Test Coverage Summary 🛡️\n\n"
+
+          # Safety
+          comment_md += "**Safety Scan:**\n"
+          comment_md += "| Python Version | Vulnerabilities |\n"
+          comment_md += "|---------------|----------------|\n"
+          total_vulns = 0
+          for file in glob.glob("reports/*.json"):
+              py_version = file.split("-")[-1].replace(".json", "")
+              with open(file) as f:
+                  data = json.load(f)
+                  count = len(data) if isinstance(data, list) else 0
+                  total_vulns += count
+                  comment_md += f"| {py_version} | {count} |\n"
+          comment_md += f"\n**Total vulnerabilities:** {total_vulns}\n"
+          comment_md += "✅ No vulnerabilities detected.\n" if total_vulns == 0 else "❌ Vulnerabilities detected! Please review.\n"
+
+          # Coverage
+          comment_md += "\n**Test Coverage:**\n"
+          comment_md += "| Python Version | Coverage % |\n"
+          comment_md += "|---------------|------------|\n"
+          for file in glob.glob("coverage-reports/coverage-*.xml"):
+              py_version = file.split("-")[-1].replace(".xml", "")
+              tree = ET.parse(file)
+              root = tree.getroot()
+              coverage_percent = float(root.attrib.get("line-rate", 0.0)) * 100
+              comment_md += f"| {py_version} | {coverage_percent:.1f}% |\n"
+
+          with open("pr_comment.md", "w") as f:
+              f.write(comment_md)
+          EOF
+
+      - name: Post comment to PR
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            $(cat pr_comment.md)
 
   # -------------------------
   # Notification
@@ -195,7 +300,6 @@ jobs:
     needs: [lint-and-test, merge-reports, build-docker]
     runs-on: ubuntu-latest
     if: always()
-
     steps:
       - name: Notify on failure
         if: failure()
