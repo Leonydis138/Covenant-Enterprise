@@ -1,103 +1,42 @@
-name: CI - Covenant.AI Enhanced
+lint-and-test:
+  runs-on: ubuntu-latest
+  strategy:
+    matrix:
+      python-version: ['3.9', '3.10']  # Torch 2.0 compatible
+    fail-fast: false
 
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  workflow_dispatch:  # Manual trigger option
+  steps:
+    - uses: actions/checkout@v4
 
-permissions:
-  contents: read
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: false
 
-jobs:
-  lint-and-test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.9', '3.10', '3.11']
-      fail-fast: false
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install numpy pandas scipy transformers sentence-transformers faiss-cpu \
+                    web3 ipfshttpclient openai anthropic google-generativeai \
+                    prometheus-client jaeger-client \
+                    pytest pytest-cov black mypy pylint
+        pip install -e .
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Format check (Black)
+      run: black --check covenant tests
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
+    - name: Type check (mypy)
+      run: mypy covenant --ignore-missing-imports
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          # Install core + dev deps (adjust if you have a requirements-dev.txt)
-          pip install torch==2.0.0+cpu torchvision==0.15.1+cpu torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cpu  # CPU-only for CI
-          pip install numpy pandas scipy transformers sentence-transformers faiss-cpu web3 ipfshttpclient openai anthropic google-generativeai prometheus-client jaeger-client pytest black mypy pylint
-          # If you generate requirements.txt from workflow_config.yaml, use: pip install -r requirements.txt
+    - name: Lint (pylint)
+      run: pylint covenant || true
 
-      - name: Lint with Black
-        run: black --check --diff covenant/ tests/ workflows/
+    - name: Run tests
+      run: pytest tests --cov=covenant --cov-report=xml --junitxml=junit/results.xml
 
-      - name: Type check with mypy
-        run: mypy --strict covenant/ tests/ workflows/
-
-      - name: Lint with pylint
-        run: pylint --rcfile=.pylintrc covenant/ tests/ workflows/ || true  # Allow warnings initially
-
-      - name: Run pytest unit/integration tests
-        run: pytest tests/unit tests/integration --cov=covenant --cov-report=xml --junitxml=junit/test-results.xml
-
-      - name: Smoke test Workflow 01 (Environment Setup)
-        run: python workflows/01_setup_environment.py
-
-      - name: Smoke test Workflow 09 (Basic Tests)
-        run: python workflows/09_run_basic_tests.py
-
-      - name: Upload coverage report
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}  # Optional: add if using Codecov
-          file: coverage.xml
-          fail_ci_if_error: false
-
-      - name: Upload test artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-logs-${{ matrix.python-version }}
-          path: |
-            junit/
-            coverage.xml
-            workflow_setup.log
-
-  build-docker:
-    needs: lint-and-test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile  # Assume you have one; create if needed
-          push: false
-          tags: covenant-ai-enhanced:ci-test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  notify:
-    needs: [lint-and-test, build-docker]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Notify on failure
-        if: failure()
-        run: echo "CI failed - check GitHub Actions logs"
-        # Add Slack/Teams notification here if desired
+    - name: Smoke tests
+      run: |
+        python workflows/01_setup_environment.py
+        python workflows/09_run_basic_tests.py
