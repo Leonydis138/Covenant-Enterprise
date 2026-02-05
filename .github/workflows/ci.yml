@@ -186,12 +186,8 @@ jobs:
           
           # Get coverage percentage
           if [ -f "test-results/coverage.xml" ]; then
-            coverage=$(python -c "
-import xml.etree.ElementTree as ET
-tree = ET.parse('test-results/coverage.xml')
-root = tree.getroot()
-print(round(float(root.attrib.get('line-rate', 0)) * 100, 1))
-")
+            # Use a single-line Python command for coverage calculation
+            coverage=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('test-results/coverage.xml'); root = tree.getroot(); print(round(float(root.attrib.get('line-rate', 0)) * 100, 1))")
             echo "**Test Coverage:** ${coverage}%" >> summary.md
           else
             echo "**Test Coverage:** Not available" >> summary.md
@@ -205,15 +201,25 @@ print(round(float(root.attrib.get('line-rate', 0)) * 100, 1))
             if [ "$vuln_count" -gt 0 ]; then
               echo "" >> summary.md
               echo "### 🔴 Security Issues Found:" >> summary.md
-              python -c "
+              # Write Python script to a temporary file to avoid YAML parsing issues
+              cat > /tmp/list_vulns.py << 'EOF'
 import json
-data = json.load(open('safety-reports/safety-report.json'))
-for vuln in data[:5]:  # Show first 5
-    print(f'- **{vuln.get(\"package_name\", \"Unknown\")}**: {vuln.get(\"vulnerability_id\", \"Unknown\")}')
-if len(data) > 5:
-    print(f'- ... and {len(data) - 5} more')
-              " >> summary.md
+import sys
+try:
+    with open('safety-reports/safety-report.json') as f:
+        data = json.load(f)
+        for i, vuln in enumerate(data[:5]):
+            print(f'- **{vuln.get("package_name", "Unknown")}**: {vuln.get("vulnerability_id", "Unknown")}')
+        if len(data) > 5:
+            print(f'- ... and {len(data) - 5} more')
+except Exception as e:
+    print(f"- Error reading safety report: {e}")
+EOF
+              python /tmp/list_vulns.py >> summary.md
             fi
+          else
+            echo "**Security Vulnerabilities:** Report not generated" >> summary.md
+            vuln_count=0
           fi
           
           # Display summary
