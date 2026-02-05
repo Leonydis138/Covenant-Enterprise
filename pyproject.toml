@@ -1,40 +1,38 @@
 [build-system]
-requires = ["setuptools>=65.5.0", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[project]
-name = "Covenant-Enterprise"
-version = "1.0.0"
-description = "Covenant Enterprise AI Framework"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "torch",
-    "torchvision",
-    "torchaudio",
-    "numpy",
-    "pandas",
-    "scipy",
-    "transformers",
-    "sentence-transformers",
-    "faiss-cpu",
-    "web3",
-    "ipfshttpclient",
-    "openai",
-    "anthropic",
-    "google-generativeai",
-    "prometheus-client",
-    "jaeger-client",
-    "pytest",
-    "pytest-cov",
-    "black",
-    "mypy",
-    "pylint",
-    "isort"
-]
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+exclude = '''
+/(
+    \.venv
+  | build
+  | dist
+  | covenant-ai-enterprise-complete.tar.gz
+)/
+'''
 
-[project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "black", "mypy", "pylint", "isort"]
+[tool.isort]
+profile = "black"
+line_length = 100
+src_paths = ["src", "tests"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.mypy]
+python_version = 3.11
+ignore_missing_imports = true
+explicit_package_bases = true
+namespace_packages = true
+mypy_path = "src"
+exclude = "(venv|build|dist)"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --disable-warnings"
+
+[tool.pylint.MASTER]
+ignore = ["venv", "build", "dist"]
+
+[tool.pylint.FORMAT]
+max-line-length = 100
