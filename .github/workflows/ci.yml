@@ -38,37 +38,22 @@ jobs:
                       web3 ipfshttpclient openai anthropic google-generativeai \
                       prometheus-client jaeger-client \
                       pytest pytest-cov black mypy pylint
-          # Install local package if it exists
-          if [ -f setup.py ] || [ -f pyproject.toml ]; then
-            pip install -e .
+          pip install -e .  # editable install from root (src package)
 
-      - name: Prepare directories for test output
-        run: |
-          mkdir -p junit
-          touch workflow_setup.log
-
-      - name: Auto-format with Black (optional)
-        run: black Covenant-Enterprise tests
+      - name: Auto-format with Black
+        run: black src tests
 
       - name: Format check (Black)
-        run: black --check Covenant-Enterprise tests
+        run: black --check src tests
 
       - name: Type check (mypy)
-        run: mypy Covenant-Enterprise --ignore-missing-imports
+        run: mypy src --ignore-missing-imports
 
       - name: Lint (pylint)
-        run: pylint Covenant-Enterprise || true
+        run: pylint src || true
 
       - name: Run tests
-        run: pytest tests \
-            --cov=Covenant-Enterprise \
-            --cov-report=xml:coverage.xml \
-            --junitxml=junit/results.xml
-
-      - name: Smoke tests
-        run: |
-          python workflows/01_setup_environment.py
-          python workflows/09_run_basic_tests.py
+        run: pytest tests --cov=src --cov-report=xml --junitxml=junit/results.xml
 
       - name: Upload coverage report
         if: always()
@@ -83,9 +68,8 @@ jobs:
         with:
           name: test-logs-${{ matrix.python-version }}
           path: |
-            junit/results.xml
+            junit/
             coverage.xml
-            workflow_setup.log
 
   # -------------------------
   # Security Scan Job
@@ -150,12 +134,12 @@ jobs:
       - name: Merge Safety reports and print CI summary
         run: |
           python - <<'EOF'
-          import json, glob, xml.etree.ElementTree as ET, sys, os
+          import json, glob, xml.etree.ElementTree as ET, sys
 
           vuln_summary = {}
           merged_vulns = []
           for file in glob.glob("safety-reports/*.json"):
-              py_version = os.path.basename(file).split("-")[-1].replace(".json", "")
+              py_version = file.split("-")[-1].replace(".json", "")
               with open(file) as f:
                   data = json.load(f)
                   vuln_count = len(data) if isinstance(data, list) else 0
@@ -164,7 +148,7 @@ jobs:
 
           coverage_summary = {}
           for file in glob.glob("coverage-reports/coverage-*.xml"):
-              py_version = os.path.basename(file).split("-")[-1].replace(".xml", "")
+              py_version = file.split("-")[-1].replace(".xml", "")
               tree = ET.parse(file)
               root = tree.getroot()
               coverage_summary[py_version] = float(root.attrib.get("line-rate", 0.0)) * 100
@@ -258,7 +242,10 @@ jobs:
                   total_vulns += count
                   comment_md += f"| {py_version} | {count} |\n"
           comment_md += f"\n**Total vulnerabilities:** {total_vulns}\n"
-          comment_md += "✅ No vulnerabilities detected.\n" if total_vulns == 0 else "❌ Vulnerabilities detected! Please review.\n"
+          if total_vulns == 0:
+              comment_md += "✅ No vulnerabilities detected.\n"
+          else:
+              comment_md += "❌ Vulnerabilities detected! Please review.\n"
 
           comment_md += "\n**Test Coverage:**\n"
           comment_md += "| Python Version | Coverage % |\n"
