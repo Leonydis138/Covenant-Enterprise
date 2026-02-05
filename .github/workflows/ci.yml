@@ -53,8 +53,8 @@ jobs:
       - name: Sort imports (isort)
         run: isort src tests --check-only
 
-      - name: Type check (mypy)
-        run: mypy src --ignore-missing-imports
+      - name: Type check
+        run: mypy src
 
       - name: Lint (pylint)
         run: pylint src || true
