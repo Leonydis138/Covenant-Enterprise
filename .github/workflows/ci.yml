@@ -11,14 +11,14 @@ permissions:
   contents: read
 
 # -------------------------
-# Lint & Test Matrix
+# Lint & Test Job
 # -------------------------
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.11']  # ✅ Only 3.11
       fail-fast: false
 
     steps:
@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'  # ✅ fixed caching
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -57,7 +57,7 @@ jobs:
           python workflows/01_setup_environment.py
           python workflows/09_run_basic_tests.py
 
-      - name: Upload coverage report per Python
+      - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -75,13 +75,13 @@ jobs:
             workflow_setup.log
 
 # -------------------------
-# Security Scan Matrix
+# Security Scan Job
 # -------------------------
   security:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.11']  # ✅ Only 3.11
     needs: lint-and-test
 
     steps:
@@ -110,7 +110,7 @@ jobs:
           else
             echo "::warning::No requirements.txt found — skipping Safety scan"
 
-      - name: Upload per-version Safety report
+      - name: Upload Safety report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -118,7 +118,7 @@ jobs:
           path: safety-report-${{ matrix.python-version }}.json
 
 # -------------------------
-# Merge Safety Reports + Print CI Summary Table
+# Merge Security Reports + CI Summary
 # -------------------------
   merge-security-reports:
     runs-on: ubuntu-latest
@@ -139,7 +139,6 @@ jobs:
           python - <<'EOF'
           import json, glob, xml.etree.ElementTree as ET, sys
 
-          # ---- Safety ----
           vuln_summary = {}
           merged_vulns = []
           for file in glob.glob("safety-reports/*.json"):
@@ -150,7 +149,6 @@ jobs:
                   vuln_summary[py_version] = vuln_count
                   merged_vulns.extend(data if isinstance(data, list) else [])
 
-          # ---- Coverage ----
           coverage_summary = {}
           for file in glob.glob("coverage-reports/coverage-*.xml"):
               py_version = file.split("-")[-1].replace(".xml", "")
@@ -158,7 +156,6 @@ jobs:
               root = tree.getroot()
               coverage_summary[py_version] = float(root.attrib.get("line-rate", 0.0)) * 100
 
-          # ---- Print CI Table ----
           print("\n### CI SUMMARY TABLE ###\n")
           print("{:<10} | {:<15} | {:<12} | {:<7}".format("Python", "Coverage %", "Vulnerabilities", "Status"))
           print("-" * 50)
@@ -169,7 +166,6 @@ jobs:
               print("{:<10} | {:<15.1f} | {:<12} | {:<7}".format(py_version, cov, vulns, status))
           print("\n")
 
-          # ---- Save merged report ----
           with open("merged-safety-report.json", "w") as f:
               json.dump(merged_vulns, f, indent=2)
 
@@ -188,7 +184,7 @@ jobs:
           path: merged-safety-report.json
 
 # -------------------------
-# Docker Build
+# Docker Build Job
 # -------------------------
   build-docker:
     needs: [lint-and-test, merge-security-reports]
@@ -237,7 +233,6 @@ jobs:
 
           comment_md = "### 🛡️ Safety Scan & Test Coverage Summary 🛡️\n\n"
 
-          # ---- Safety ----
           comment_md += "**Safety Scan:**\n"
           comment_md += "| Python Version | Vulnerabilities |\n"
           comment_md += "|---------------|----------------|\n"
@@ -255,7 +250,6 @@ jobs:
           else:
               comment_md += "❌ Vulnerabilities detected! Please review.\n"
 
-          # ---- Coverage ----
           comment_md += "\n**Test Coverage:**\n"
           comment_md += "| Python Version | Coverage % |\n"
           comment_md += "|---------------|------------|\n"
@@ -280,7 +274,7 @@ jobs:
             $(cat pr_comment.md)
 
 # -------------------------
-# Notifications
+# Notification Job
 # -------------------------
   notify:
     needs: [lint-and-test, merge-security-reports, build-docker]
