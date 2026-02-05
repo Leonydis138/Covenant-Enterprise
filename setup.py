@@ -1,14 +1,22 @@
-#!/usr/bin/env python
 from setuptools import setup, find_packages
+
+# Optional: Only if you need Path usage
+from pathlib import Path
+
+here = Path(__file__).parent.resolve()
 
 setup(
     name="Covenant-Enterprise",
     version="1.0.0",
     description="Covenant Enterprise AI Framework",
-    packages=find_packages(where="src") if (Path("src").exists()) else find_packages(),
-    package_dir={"": "src"} if (Path("src").exists()) else None,
-    include_package_data=True,
-    python_requires=">=3.10",
+    long_description=(here / "README.md").read_text(encoding="utf-8"),
+    long_description_content_type="text/markdown",
+    author="Your Name",
+    author_email="your.email@example.com",
+    url="https://github.com/Leonydis138/Covenant-Enterprise",
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
+    python_requires=">=3.11",
     install_requires=[
         "torch",
         "torchvision",
@@ -25,21 +33,26 @@ setup(
         "anthropic",
         "google-generativeai",
         "prometheus-client",
-        "jaeger-client"
+        "jaeger-client",
+        "pytest",
+        "pytest-cov",
+        "black",
+        "mypy",
+        "pylint",
+        "isort"
     ],
     extras_require={
-        "dev": [
-            "pytest",
-            "pytest-cov",
-            "black",
-            "mypy",
-            "pylint",
-            "isort"
-        ]
+        "dev": ["pytest", "pytest-cov", "black", "mypy", "pylint", "isort"]
     },
+    include_package_data=True,
     entry_points={
         "console_scripts": [
-            "covenant=covenant_cli:main",
-        ],
+            "covenant=covenant_cli:main"
+        ]
     },
+    classifiers=[
+        "Programming Language :: Python :: 3.11",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
 )
