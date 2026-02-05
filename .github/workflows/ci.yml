@@ -36,8 +36,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Pin Torch packages compatible with Python 3.11
-          pip install torch==2.2.0 torchvision==0.19.1 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cpu
+          # Use compatible PyTorch packages for Python 3.11
+          # Option 1: Latest compatible versions (recommended)
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+          
+          # Option 2: Specific compatible versions (if Option 1 causes issues)
+          # pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cpu
           
           # Install the rest
           pip install numpy pandas scipy transformers sentence-transformers faiss-cpu \
@@ -103,25 +107,33 @@ jobs:
       - name: Install Safety
         run: pip install safety==3.6.0
 
-      - name: Generate requirements.txt if not exists
+      - name: Generate requirements.txt
         run: |
-          if [ ! -f requirements.txt ]; then
-            echo "Generating requirements.txt from installed packages..."
-            pip freeze > requirements.txt
-          fi
+          echo "Generating requirements.txt from installed packages..."
+          pip freeze > requirements.txt
+          echo "Generated requirements.txt:"
+          head -20 requirements.txt
 
       - name: Run Safety Security Scan
         id: safety-scan
         run: |
           if [ -f requirements.txt ]; then
+            echo "Running safety scan on requirements.txt..."
             safety check \
               --disable-audit-and-monitor \
               --full-report \
               --file=requirements.txt \
               --json > safety-report.json || true
-            echo "Safety vulnerabilities: $(jq length safety-report.json || echo 0)"
+            
+            # Count vulnerabilities
+            if [ -s safety-report.json ]; then
+              vuln_count=$(jq length safety-report.json 2>/dev/null || echo 0)
+            else
+              vuln_count=0
+            fi
+            echo "Safety vulnerabilities found: $vuln_count"
           else
-            echo "::warning::No requirements.txt found — skipping Safety scan"
+            echo "::warning::No requirements.txt found — creating empty report"
             echo '[]' > safety-report.json
           fi
 
@@ -150,73 +162,84 @@ jobs:
           name: test-results-${{ needs.lint-and-test.outputs.python-version }}
           path: ./test-results
 
+      - name: Install jq for JSON processing
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Process and Merge Reports
         run: |
-          python - <<'EOF'
-          import json, os, xml.etree.ElementTree as ET, sys
-
+          # Create summary file
+          echo "# CI Summary Report" > summary.md
+          echo "## Generated on $(date)" >> summary.md
+          echo "" >> summary.md
+          
           # Process safety report
-          safety_file = "safety-reports/safety-report.json"
-          vulnerabilities = []
-          
-          if os.path.exists(safety_file):
-              with open(safety_file) as f:
-                  vulnerabilities = json.load(f)
-          
-          total_vulns = len(vulnerabilities) if isinstance(vulnerabilities, list) else 0
+          if [ -f "safety-reports/safety-report.json" ]; then
+            SAFETY_FILE="safety-reports/safety-report.json"
+            VULN_COUNT=$(jq length "$SAFETY_FILE" 2>/dev/null || echo 0)
+            echo "**Security Vulnerabilities:** $VULN_COUNT" >> summary.md
+            
+            if [ "$VULN_COUNT" -gt 0 ]; then
+              echo "" >> summary.md
+              echo "### 🔴 Vulnerabilities Found:" >> summary.md
+              jq -r '.[] | "- **\(.package_name)**: \(.advisory | split("\n")[0])"' "$SAFETY_FILE" >> summary.md 2>/dev/null || echo "  (Unable to parse vulnerability details)" >> summary.md
+            fi
+          else
+            echo "**Security Vulnerabilities:** No report generated" >> summary.md
+            VULN_COUNT=0
+          fi
           
           # Process coverage report
-          coverage_file = "test-results/coverage.xml"
-          coverage_percent = 0.0
+          if [ -f "test-results/coverage.xml" ]; then
+            COVERAGE=$(python -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('test-results/coverage.xml')
+root = tree.getroot()
+coverage = float(root.attrib.get('line-rate', 0)) * 100
+print(f'{coverage:.1f}')
+" 2>/dev/null || echo "0.0")
+            echo "" >> summary.md
+            echo "**Test Coverage:** ${COVERAGE}%" >> summary.md
+          else
+            echo "" >> summary.md
+            echo "**Test Coverage:** No coverage report found" >> summary.md
+            COVERAGE=0.0
+          fi
           
-          if os.path.exists(coverage_file):
-              tree = ET.parse(coverage_file)
-              root = tree.getroot()
-              coverage_percent = float(root.attrib.get("line-rate", 0.0)) * 100
+          # Create JSON report
+          cat > merged-report.json << EOF
+{
+  "python_version": "3.11",
+  "coverage_percent": ${COVERAGE},
+  "vulnerabilities": ${VULN_COUNT},
+  "status": "$([ ${VULN_COUNT} -eq 0 ] && echo "success" || echo "failure")",
+  "timestamp": "$(date +%s)"
+}
+EOF
           
-          # Print summary
-          print("\n" + "="*60)
-          print("CI SUMMARY")
-          print("="*60)
-          print(f"{'Python Version':<20}: 3.11")
-          print(f"{'Test Coverage':<20}: {coverage_percent:.1f}%")
-          print(f"{'Vulnerabilities':<20}: {total_vulns}")
-          print(f"{'Status':<20}: ", end="")
-          
-          if total_vulns > 0:
-              print("❌ Vulnerabilities detected!")
-              print("\nSecurity Issues Found:")
-              for vuln in vulnerabilities:
-                  if isinstance(vuln, dict):
-                      print(f"  - {vuln.get('package_name', 'Unknown')}: {vuln.get('vulnerability_id', 'Unknown')}")
-                      print(f"    {vuln.get('advisory', 'No advisory available')}")
-          else:
-              print("✅ All checks passed!")
-          print("="*60)
-          
-          # Save merged report
-          merged_report = {
-              "python_version": "3.11",
-              "coverage_percent": coverage_percent,
-              "vulnerabilities": total_vulns,
-              "security_issues": vulnerabilities,
-              "timestamp": $(date +%s)
-          }
-          
-          with open("merged-report.json", "w") as f:
-              json.dump(merged_report, f, indent=2)
+          # Display summary
+          echo "=========================================="
+          echo "CI SUMMARY"
+          echo "=========================================="
+          echo "Python Version: 3.11"
+          echo "Test Coverage: ${COVERAGE}%"
+          echo "Vulnerabilities: ${VULN_COUNT}"
+          echo "Status: $([ ${VULN_COUNT} -eq 0 ] && echo "✅ PASS" || echo "❌ FAIL")"
+          echo "=========================================="
           
           # Fail if vulnerabilities found
-          if total_vulns > 0:
-              sys.exit(1)
-          EOF
+          if [ ${VULN_COUNT} -gt 0 ]; then
+            echo "❌ Vulnerabilities detected! Failing workflow."
+            exit 1
+          fi
 
       - name: Upload merged report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: merged-report
-          path: merged-report.json
+          path: |
+            merged-report.json
+            summary.md
 
   # -------------------------
   # Docker Build
@@ -231,24 +254,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        if: github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push Docker image
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
-          push: ${{ github.ref == 'refs/heads/main' }}
-          tags: |
-            covenant-ai-enhanced:latest
-            covenant-ai-enhanced:${{ github.sha }}
-            ${{ secrets.DOCKER_USERNAME }}/covenant-ai-enhanced:latest
-            ${{ secrets.DOCKER_USERNAME }}/covenant-ai-enhanced:${{ github.sha }}
+          push: false
+          tags: covenant-ai-enhanced:ci-test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -268,35 +280,15 @@ jobs:
 
       - name: Generate PR comment
         run: |
-          python - <<'EOF'
-          import json, os
-          
-          report_file = "reports/merged-report.json"
-          if os.path.exists(report_file):
-              with open(report_file) as f:
-                  report = json.load(f)
-              
-              coverage = report.get("coverage_percent", 0.0)
-              vulns = report.get("vulnerabilities", 0)
-              
-              comment = "## 🛡️ CI Results Summary 🛡️\n\n"
-              comment += "| Metric | Result | Status |\n"
-              comment += "|--------|--------|--------|\n"
-              comment += f"| Test Coverage | {coverage:.1f}% | {'✅' if coverage >= 80 else '⚠️'} |\n"
-              comment += f"| Security Vulnerabilities | {vulns} | {'✅' if vulns == 0 else '❌'} |\n"
-              
-              if vulns > 0:
-                  comment += "\n### 🔴 Security Issues Found:\n"
-                  for issue in report.get("security_issues", []):
-                      if isinstance(issue, dict):
-                          comment += f"- **{issue.get('package_name', 'Unknown')}**: {issue.get('advisory', 'No details')}\n"
-              
-              comment += "\n---\n"
-              comment += "*Automated CI report generated by GitHub Actions*"
-              
-              with open("pr_comment.md", "w") as f:
-                  f.write(comment)
-          EOF
+          if [ -f "reports/summary.md" ]; then
+            cat reports/summary.md > pr_comment.md
+            echo "" >> pr_comment.md
+            echo "---" >> pr_comment.md
+            echo "*Automated CI report generated by GitHub Actions*" >> pr_comment.md
+          else
+            echo "## CI Summary" > pr_comment.md
+            echo "Reports not available. Check workflow logs for details." >> pr_comment.md
+          fi
 
       - name: Post comment to PR
         uses: peter-evans/create-or-update-comment@v4
@@ -328,7 +320,8 @@ jobs:
         if: steps.check-status.outputs.status == 'success'
         run: |
           echo "✅ All CI checks passed!"
-          # Add notification logic here (Slack, email, etc.)
+          echo "Coverage: $(jq -r '.coverage_percent' reports/merged-report.json 2>/dev/null || echo 'Unknown')%"
+          echo "Vulnerabilities: $(jq -r '.vulnerabilities' reports/merged-report.json 2>/dev/null || echo 'Unknown')"
 
       - name: Failure notification
         if: steps.check-status.outputs.status == 'failure'
@@ -338,3 +331,5 @@ jobs:
           echo "- Lint & Test: ${{ needs.lint-and-test.result }}"
           echo "- Security: ${{ needs.security.result }}"
           echo "- Merge Reports: ${{ needs.merge-reports.result }}"
+          echo ""
+          echo "Latest logs available at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
