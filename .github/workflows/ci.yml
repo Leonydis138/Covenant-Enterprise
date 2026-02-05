@@ -42,8 +42,8 @@ jobs:
                       web3 ipfshttpclient openai anthropic google-generativeai \
                       prometheus-client jaeger-client \
                       pytest pytest-cov black mypy pylint isort
-          pip install -e Covenant-Enterprise
-
+          pip install -e .
+          
       - name: Auto-format with Black
         run: black src tests
 
