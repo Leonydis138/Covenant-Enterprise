@@ -4,6 +4,7 @@ Setup configuration for COVENANT.AI
 
 from setuptools import setup, find_packages
 from pathlib import Path
+from itertools import chain
 
 # Read README
 readme_file = Path(__file__).parent / "README.md"
@@ -11,30 +12,19 @@ long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists
 
 # Core dependencies
 INSTALL_REQUIRES = [
-    # Core framework
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "typing-extensions>=4.9.0",
-    
-    # Web framework
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "httpx>=0.26.0",
-    
-    # Database & Cache
     "sqlalchemy>=2.0.25",
     "redis[hiredis]>=5.0.1",
-    
-    # AI/ML Core
     "numpy>=1.26.0",
     "scipy>=1.11.0",
     "scikit-learn>=1.4.0",
     "torch>=2.1.0",
-    
-    # Configuration
     "python-dotenv>=1.0.0",
-    
-    # Utilities
     "click>=8.1.0",
     "rich>=13.7.0",
 ]
@@ -64,7 +54,8 @@ EXTRAS_REQUIRE = {
     ],
 }
 
-EXTRAS_REQUIRE["all"] = sum(EXTRAS_REQUIRE.values(), [])
+# Combine all extras into "all"
+EXTRAS_REQUIRE["all"] = list(chain.from_iterable(EXTRAS_REQUIRE.values()))
 
 setup(
     name="covenant-ai",
