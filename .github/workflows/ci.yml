@@ -36,10 +36,9 @@ jobs:
           pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install numpy pandas scipy transformers sentence-transformers faiss-cpu \
                       web3 ipfshttpclient openai anthropic google-generativeai \
-                      prometheus-client jaeger-client \
-                      pytest pytest-cov black mypy pylint isort
-          # Fix editable install — point to current repo
-          pip install -e .
+                      prometheus-client jaeger-client
+          # ✅ Fixed editable install
+          pip install -e .[dev]
 
       - name: Auto-format with Black (optional)
         run: black src tests
@@ -92,7 +91,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -149,8 +148,8 @@ jobs:
               py_version = file.split("-")[-1].replace(".json", "")
               with open(file) as f:
                   data = json.load(f)
-                  vuln_count = len(data) if isinstance(data, list) else 0
-                  vuln_summary[py_version] = vuln_count
+                  count = len(data) if isinstance(data, list) else 0
+                  vuln_summary[py_version] = count
                   merged_vulns.extend(data if isinstance(data, list) else [])
 
           coverage_summary = {}
