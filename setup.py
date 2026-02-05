@@ -1,58 +1,60 @@
 from setuptools import setup, find_packages
-
-# Optional: Only if you need Path usage
 from pathlib import Path
 
-here = Path(__file__).parent.resolve()
+BASE_DIR = Path(__file__).resolve().parent
+
+README = (BASE_DIR / "README.md").read_text(encoding="utf-8")
 
 setup(
-    name="Covenant-Enterprise",
+    name="covenant-ai-enterprise",
     version="1.0.0",
-    description="Covenant Enterprise AI Framework",
-    long_description=(here / "README.md").read_text(encoding="utf-8"),
+    description="Covenant.AI Enterprise — Constitutional, Ethical, Multi-Agent AI System",
+    long_description=README,
     long_description_content_type="text/markdown",
-    author="Your Name",
-    author_email="your.email@example.com",
-    url="https://github.com/Leonydis138/Covenant-Enterprise",
-    packages=find_packages(where="src"),
+    author="Covenant AI",
+    license="MIT",
+    python_requires=">=3.10",
     package_dir={"": "src"},
-    python_requires=">=3.11",
+    packages=find_packages(where="src"),
+    include_package_data=True,
     install_requires=[
-        "torch",
-        "torchvision",
-        "torchaudio",
+        "fastapi",
+        "uvicorn",
+        "pydantic",
         "numpy",
-        "pandas",
         "scipy",
-        "transformers",
-        "sentence-transformers",
-        "faiss-cpu",
-        "web3",
-        "ipfshttpclient",
-        "openai",
-        "anthropic",
-        "google-generativeai",
+        "scikit-learn",
+        "requests",
+        "httpx",
         "prometheus-client",
-        "jaeger-client",
-        "pytest",
-        "pytest-cov",
-        "black",
-        "mypy",
-        "pylint",
-        "isort"
+        "loguru",
     ],
     extras_require={
-        "dev": ["pytest", "pytest-cov", "black", "mypy", "pylint", "isort"]
+        "dev": [
+            "pytest",
+            "pytest-cov",
+            "black",
+            "isort",
+            "mypy",
+            "pylint",
+        ],
+        "llm": [
+            "openai",
+            "anthropic",
+            "google-generativeai",
+        ],
+        "blockchain": [
+            "web3",
+            "ipfshttpclient",
+        ],
     },
-    include_package_data=True,
     entry_points={
         "console_scripts": [
-            "covenant=covenant_cli:main"
+            "covenant=covenant_cli:main",
         ]
     },
     classifiers=[
-        "Programming Language :: Python :: 3.11",
-        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
     ],
 )
