@@ -1,46 +1,49 @@
 [build-system]
-requires = ["setuptools>=65.0", "wheel"]
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "covenant"
+name = "Covenant-Enterprise"
 version = "1.0.0"
-description = "Covenant-AI Enterprise Package"
+description = "Covenant Enterprise AI Framework"
 authors = [
-  { name="Leonydis138", email="your-email@example.com" }
+    { name = "Leonydis138", email = "youremail@example.com" }
 ]
 readme = "README.md"
-requires-python = ">=3.11"
-license = { file="LICENSE" }
-
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
 dependencies = [
-  "pydantic>=2.5.0",
-  "pydantic-settings>=2.1.0",
-  "typing-extensions>=4.9.0",
-  "fastapi>=0.109.0",
-  "uvicorn[standard]>=0.27.0",
-  "httpx>=0.26.0",
-  "sqlalchemy>=2.0.25",
-  "redis[hiredis]>=5.0.1",
-  "numpy>=1.26.0",
-  "scipy>=1.11.0",
-  "scikit-learn>=1.4.0",
-  "torch>=2.1.0",
-  "python-dotenv>=1.0.0",
-  "click>=8.1.0",
-  "rich>=13.7.0",
-  "tenacity>=8.2.0",
-  "asyncio>=3.4.3",
-  "aiohttp>=3.9.0",
-  "cryptography>=42.0.0"
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "numpy",
+    "pandas",
+    "scipy",
+    "transformers",
+    "sentence-transformers",
+    "faiss-cpu",
+    "web3",
+    "ipfshttpclient",
+    "openai",
+    "anthropic",
+    "google-generativeai",
+    "prometheus-client",
+    "jaeger-client"
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+# Mark optional-dependencies as dynamic to avoid _MissingDynamic errors
+dynamic = ["optional-dependencies"]
 
-[tool.setuptools.entry-points.console_scripts]
-covenant-cli = "covenant_cli:main"
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "black",
+    "mypy",
+    "pylint",
+    "isort"
+]
 
-[tool.black]
-line-length = 120
-target-version = ['py311']
+[tool.setuptools]
+packages = ["covenant"]
+include-package-data = true
