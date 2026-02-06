@@ -1,283 +1,348 @@
-name: CI - Covenant.AI Enhanced
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main, develop]
-  workflow_dispatch:
-
-permissions:
-  contents: write
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
 
 jobs:
-  lint-and-test:
+  # Code Quality Checks
+  code-quality:
+    name: Code Quality
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.11']
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Clean problematic files
-        run: |
-          echo "=== CLEANING PROBLEMATIC FILES ==="
-          
-          # Remove the invalid filename that causes mypy to fail
-          if [ -f "src/covenant/\[core,agents,blockchain,llm,security,monitoring,ml,utils,api,commandments\]" ]; then
-            echo "Removing problematic file..."
-            rm -f "src/covenant/\[core,agents,blockchain,llm,security,monitoring,ml,utils,api,commandments\]"
-          fi
-          
-          # Also clean any files with invalid characters
-          find src/covenant -maxdepth 1 -name "*[*" -o -name "*]*" -o -name "*{*" -o -name "*}*" | while read file; do
-            echo "Found invalid filename: $file"
-            rm -f "$file"
-          done
-
+      - uses: actions/checkout@v4
+      
       - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black isort flake8 pylint mypy bandit
+          pip install -r requirements.txt
+      
+      - name: Run Black
+        run: black --check --diff src tests
+      
+      - name: Run isort
+        run: isort --check-only --diff src tests
+      
+      - name: Run Flake8
+        run: flake8 src tests --max-line-length=100 --extend-ignore=E203,W503
+      
+      - name: Run Pylint
+        run: pylint src --fail-under=8.0
+      
+      - name: Run MyPy
+        run: mypy src --strict
+      
+      - name: Run Bandit Security Check
+        run: bandit -r src -ll
+
+  # Unit Tests
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11', '3.12']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip setuptools wheel
-
+      
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov black mypy pylint isort
-
-      - name: Install project
-        run: pip install -e .
-
-      - name: Format with Black
-        run: black src/covenant tests --check || black src/covenant tests
-
-      - name: Sort imports
-        run: isort src/covenant tests --check-only || isort src/covenant tests
-
-      - name: Fix mypy configuration
+          pip install pytest pytest-asyncio pytest-cov pytest-timeout
+      
+      - name: Run Tests
         run: |
-          echo "=== ENSURING VALID MYPY CONFIG ==="
-          
-          # Create a clean mypy.ini if it doesn't exist or is invalid
-          cat > mypy.ini << 'EOF'
-[mypy]
-python_version = 3.11
-ignore_missing_imports = true
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false
-
-[mypy-src.covenant.*]
-EOF
-          
-          echo "mypy.ini content:"
-          cat mypy.ini
-
-      - name: Type check with mypy
-        run: |
-          echo "=== RUNNING TYPE CHECKS ==="
-          
-          # First, verify Python imports work
-          python -c "
-try:
-    import src.covenant
-    print('✓ Python import successful')
-except Exception as e:
-    print(f'✗ Python import failed: {e}')
-    exit(1)
-"
-          
-          # Run mypy with command-line args for safety
-          mypy src/covenant \
-            --config-file mypy.ini \
-            --python-version 3.11 \
-            --ignore-missing-imports \
-            --warn-return-any \
-            --warn-unused-configs \
-            --show-error-codes
-
-      - name: Run linting
-        run: pylint src/covenant --fail-under=6.0 || echo "Pylint completed (score may be below threshold)"
-
-      - name: Run tests
-        run: |
-          pytest tests/ -v \
+          pytest tests/ \
             --cov=src/covenant \
             --cov-report=xml \
             --cov-report=html \
-            --junitxml=junit/results.xml
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
+            --cov-report=term \
+            --timeout=30 \
+            -v
+      
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
         with:
-          name: test-results-${{ matrix.python-version }}
-          path: |
-            junit/
-            coverage.xml
-            htmlcov/
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
-  security:
+  # Integration Tests
+  integration-test:
+    name: Integration Tests
     runs-on: ubuntu-latest
-    needs: lint-and-test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: covenant_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
+          python-version: '3.12'
+          cache: 'pip'
+      
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install safety
-
-      - name: Run safety scan
+          pip install pytest pytest-asyncio
+      
+      - name: Run Integration Tests
+        env:
+          COVENANT_DB_HOST: localhost
+          COVENANT_DB_PORT: 5432
+          COVENANT_DB_NAME: covenant_test
+          COVENANT_DB_USER: postgres
+          COVENANT_DB_PASSWORD: postgres
+          COVENANT_REDIS_HOST: localhost
+          COVENANT_REDIS_PORT: 6379
         run: |
-          # Generate current dependencies
-          pip freeze > safety-requirements.txt
-          
-          # Run safety check
-          safety check \
-            --file=safety-requirements.txt \
-            --json > safety-report.json 2>/dev/null || echo '{"vulnerabilities": []}' > safety-report.json
+          pytest tests/integration_test.py -v
 
-      - name: Upload safety report
-        uses: actions/upload-artifact@v4
-        with:
-          name: safety-report
-          path: safety-report.json
-
-  merge-reports:
+  # Security Scan
+  security:
+    name: Security Scan
     runs-on: ubuntu-latest
-    needs: [lint-and-test, security]
     steps:
-      - name: Download test results
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          pattern: test-results-*
-          path: test-results
-          merge-multiple: true
-
-      - name: Download safety report
-        uses: actions/download-artifact@v4
-        with:
-          name: safety-report
-          path: safety-reports
-
-      - name: Generate CI summary
+          python-version: '3.12'
+      
+      - name: Install dependencies
         run: |
-          # Create summary markdown
-          echo "# CI Summary Report" > summary.md
-          echo "## Generated: $(date)" >> summary.md
-          echo "" >> summary.md
-          
-          # Check if coverage file exists
-          if [ -f "test-results/coverage.xml" ]; then
-            # Use single-line Python command for coverage
-            coverage=$(python3 -c "import xml.etree.ElementTree as ET; 
-try:
-    tree = ET.parse('test-results/coverage.xml')
-    root = tree.getroot()
-    cov = float(root.attrib.get('line-rate', 0)) * 100
-    print(f'{cov:.1f}')
-except:
-    print('0.0')
-")
-            echo "**Test Coverage:** ${coverage}%" >> summary.md
-          else
-            echo "**Test Coverage:** No data" >> summary.md
-          fi
-          
-          # Check safety report
-          if [ -f "safety-reports/safety-report.json" ]; then
-            # Use single-line Python command for vulnerabilities
-            vulns=$(python3 -c "import json
-try:
-    with open('safety-reports/safety-report.json') as f:
-        data = json.load(f)
-        if isinstance(data, dict) and 'vulnerabilities' in data:
-            print(len(data['vulnerabilities']))
-        elif isinstance(data, list):
-            print(len(data))
-        else:
-            print(0)
-except:
-    print(0)
-")
-            echo "**Security Vulnerabilities:** $vulns" >> summary.md
-          else
-            echo "**Security Vulnerabilities:** Report not generated" >> summary.md
-          fi
-          
-          # Display summary
-          cat summary.md
-
-      - name: Upload summary report
+          python -m pip install --upgrade pip
+          pip install safety bandit
+      
+      - name: Run Safety Check
+        run: safety check --json
+      
+      - name: Run Bandit
+        run: bandit -r src -f json -o bandit-report.json || true
+      
+      - name: Upload Bandit Report
         uses: actions/upload-artifact@v4
         with:
-          name: ci-summary
-          path: summary.md
+          name: bandit-report
+          path: bandit-report.json
 
-  docker-build:
+  # Dependency Check
+  dependency-check:
+    name: Dependency Review
     runs-on: ubuntu-latest
-    needs: merge-reports
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+
+  # Build Documentation
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs mkdocs-material mkdocstrings[python]
+      
+      - name: Build Documentation
+        run: mkdocs build --strict
+      
+      - name: Upload Documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: site/
+
+  # Docker Build
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'release'
     steps:
       - uses: actions/checkout@v4
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
+      - name: Log in to Docker Hub
+        if: github.event_name == 'release'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: covenantai/covenant-enterprise
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      
+      - name: Build and push
+        uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/Dockerfile
-          push: false
-          tags: covenant-ai:latest
+          file: ./docker/Dockerfile
+          push: ${{ github.event_name == 'release' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  pr-comment:
+  # Performance Benchmarks
+  benchmark:
+    name: Performance Benchmarks
     runs-on: ubuntu-latest
-    needs: merge-reports
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Download summary
-        uses: actions/download-artifact@v4
-        with:
-          name: ci-summary
-          path: ./
+      - uses: actions/checkout@v4
       
-      - name: Post comment
-        uses: peter-evans/create-or-update-comment@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          issue-number: ${{ github.event.pull_request.number }}
-          body-file: summary.md
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-benchmark
+      
+      - name: Run Benchmarks
+        run: |
+          pytest tests/performance/ --benchmark-only --benchmark-json=benchmark.json
+      
+      - name: Store Benchmark Results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'pytest'
+          output-file-path: benchmark.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
 
-  notify:
+  # Release
+  release:
+    name: Create Release
     runs-on: ubuntu-latest
-    needs: [lint-and-test, merge-reports, docker-build]
+    if: github.event_name == 'release'
+    needs: [code-quality, test, integration-test, security, docs]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      
+      - name: Build distribution
+        run: python -m build
+      
+      - name: Publish to PyPI
+        if: success()
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+      
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+
+  # Notification
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [code-quality, test, integration-test, security]
     if: always()
     steps:
-      - name: Success notification
-        if: success()
-        run: |
-          echo "✅ All CI checks passed!"
-          echo "View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-      
-      - name: Failure notification
-        if: failure()
-        run: |
-          echo "❌ CI pipeline failed"
-          echo "Check logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      - name: Send Slack Notification
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "CI/CD Pipeline Status: ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Covenant Enterprise CI/CD*\nStatus: ${{ job.status }}\nBranch: ${{ github.ref }}\nCommit: ${{ github.sha }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
