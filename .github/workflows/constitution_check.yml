@@ -2,15 +2,35 @@ name: Covenant Integrity Check
 
 on:
   pull_request:
+    branches: [main, develop]
 
 jobs:
   covenant-guard:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for proper diff
 
       - name: Detect covenant modifications
         run: |
-          git fetch origin main
-          git diff --name-only origin/main...HEAD | grep "^covenant/" && exit 1 || exit 0
+          echo "Checking for modifications to covenant files..."
+          
+          # Get the base branch (target of PR)
+          BASE_BRANCH="${{ github.base_ref }}"
+          
+          # Fetch the base branch
+          git fetch origin $BASE_BRANCH
+          
+          # Check for modified files in covenant directory
+          MODIFIED_COVENANT_FILES=$(git diff --name-only origin/$BASE_BRANCH...HEAD | grep "^covenant/" || true)
+          
+          if [ -n "$MODIFIED_COVENANT_FILES" ]; then
+            echo "❌ Covenant files modified:"
+            echo "$MODIFIED_COVENANT_FILES"
+            echo "::error::Covenant files should not be modified via pull request"
+            exit 1
+          else
+            echo "✅ No covenant files modified"
+          fi
