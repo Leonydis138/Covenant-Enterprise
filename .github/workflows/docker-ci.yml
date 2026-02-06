@@ -1,0 +1,46 @@
+name: Covenant Docker CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Login to Docker (optional, for push)
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 4. Build Docker image
+      - name: Build Docker image
+        id: docker_build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true           # Push to registry
+          tags: user/covenant-enterprise:latest
+          load: true           # Load locally for subsequent steps
+
+      # 5. Run tests inside the container
+      - name: Run tests
+        run: |
+          docker run --rm user/covenant-enterprise:latest
+
+      # 6. Optional: inspect image
+      - name: Docker image info
+        run: docker image ls user/covenant-enterprise:latest
