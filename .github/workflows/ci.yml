@@ -175,14 +175,15 @@ except Exception as e:
 
       - name: Generate CI summary
         run: |
+          # Create summary markdown
           echo "# CI Summary Report" > summary.md
           echo "## Generated: $(date)" >> summary.md
           echo "" >> summary.md
           
-          # Test results
+          # Check if coverage file exists
           if [ -f "test-results/coverage.xml" ]; then
-            coverage=$(python -c "
-import xml.etree.ElementTree as ET
+            # Use single-line Python command for coverage
+            coverage=$(python3 -c "import xml.etree.ElementTree as ET; 
 try:
     tree = ET.parse('test-results/coverage.xml')
     root = tree.getroot()
@@ -196,10 +197,10 @@ except:
             echo "**Test Coverage:** No data" >> summary.md
           fi
           
-          # Security results
+          # Check safety report
           if [ -f "safety-reports/safety-report.json" ]; then
-            vulns=$(python -c "
-import json
+            # Use single-line Python command for vulnerabilities
+            vulns=$(python3 -c "import json
 try:
     with open('safety-reports/safety-report.json') as f:
         data = json.load(f)
