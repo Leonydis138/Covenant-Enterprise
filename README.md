@@ -1,3 +1,24 @@
+Why COVENANT Matters.
+
+COVENANT is not an AI model.
+It is alignment infrastructure.
+Key Differentiators
+Eliminates reward hacking by design
+Separates intelligence from authority
+Treats neural systems as unsafe by default
+Enforces ethics as constraints, not goals
+Makes catastrophic behavior structurally impossible (when decidable)
+
+Why This Is New.
+Most alignment work:
+Trains models to behave
+Hopes they generalize
+
+COVENANT:
+Removes unsafe actions from the state space
+
+Does not depend on generalization
+
 COVENANT ENTERPRISE
 
 Constitutional Governance for Autonomous Systems
